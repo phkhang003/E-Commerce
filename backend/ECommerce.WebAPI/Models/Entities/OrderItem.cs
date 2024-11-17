@@ -1,15 +1,21 @@
-using ECommerce.WebAPI.Models.Common;
+using System;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace ECommerce.WebAPI.Models.Entities;
-
-public class OrderItem : BaseEntity
+namespace ECommerce.WebAPI.Models.Entities
 {
-    public int OrderId { get; set; }
-    public int ProductId { get; set; }
-    public int Quantity { get; set; }
-    public decimal UnitPrice { get; set; }
-
-    // Navigation properties
-    public virtual Order Order { get; set; } = null!;
-    public virtual Product Product { get; set; } = null!;
+    public class OrderItem
+    {
+        public int Id { get; set; }
+        public int OrderId { get; set; }
+        public Order? Order { get; set; }
+        public int ProductId { get; set; }
+        public Product? Product { get; set; }
+        
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal UnitPrice { get; set; }
+        public int Quantity { get; set; }
+        
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal SubTotal { get; set; }
+    }
 } 

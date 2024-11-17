@@ -106,6 +106,7 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<ICartRepository, CartRepository>();
 
 // Add services
 builder.Services.AddScoped<IOrderService, OrderService>();
@@ -113,6 +114,7 @@ builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<ICartService, CartService>();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -225,6 +227,9 @@ builder.Services.AddScoped<ICookieService, CookieService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
+// Add services to the container
+builder.Services.AddScoped<ICartService, CartService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -247,6 +252,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseMiddleware<ExceptionMiddleware>();
 app.MapControllers();
 
 app.MapHealthChecks("/health", new HealthCheckOptions

@@ -2,132 +2,77 @@ using AutoMapper;
 using ECommerce.WebAPI.Models.DTOs;
 using ECommerce.WebAPI.Models.Entities;
 using ECommerce.WebAPI.Repositories.Interfaces;
-using ECommerce.WebAPI.Helpers;
-using ECommerce.WebAPI.Validators;
 using ECommerce.WebAPI.Services.Interfaces;
-using Microsoft.Extensions.Caching.Memory;
+using ECommerce.WebAPI.Common.Exceptions;
 using ECommerce.WebAPI.Common;
-using ECommerce.WebAPI.Exceptions;
-using NotFoundException = ECommerce.WebAPI.Helpers.NotFoundException;
+using ECommerce.WebAPI.Models.Common;
 
-namespace ECommerce.WebAPI.Services.Implementations;
-
-public class ProductService : IProductService
+namespace ECommerce.WebAPI.Services.Implementations
 {
-    private const string PRODUCTS_CACHE_KEY = "products";
-    private readonly IProductRepository _productRepository;
-    private readonly ICategoryRepository _categoryRepository;
-    private readonly IMapper _mapper;
-    private readonly IMemoryCache _cache;
-    private readonly IProductValidator _validator;
-
-    public ProductService(
-        IProductRepository productRepository,
-        ICategoryRepository categoryRepository, 
-        IMapper mapper,
-        IMemoryCache cache,
-        IProductValidator validator)
+    public class ProductService : IProductService
     {
-        _productRepository = productRepository;
-        _categoryRepository = categoryRepository;
-        _mapper = mapper;
-        _cache = cache;
-        _validator = validator;
-    }
+        private readonly IProductRepository _productRepository;
+        private readonly IMapper _mapper;
 
-    public async Task<IEnumerable<ProductDto>> GetAllProductsAsync()
-    {
-        if (_cache.TryGetValue(PRODUCTS_CACHE_KEY, out IEnumerable<ProductDto> cachedProducts))
-            return cachedProducts;
-
-        var products = await _productRepository.GetAllAsync();
-        var productDtos = _mapper.Map<IEnumerable<ProductDto>>(products);
-
-        var cacheOptions = new MemoryCacheEntryOptions()
-            .SetSlidingExpiration(TimeSpan.FromMinutes(10));
-        _cache.Set(PRODUCTS_CACHE_KEY, productDtos, cacheOptions);
-
-        return productDtos;
-    }
-
-    public async Task<ProductDto> GetProductByIdAsync(int id)
-    {
-        var product = await _productRepository.GetByIdAsync(id)
-            ?? throw new NotFoundException($"Product with id {id} not found");
-        return _mapper.Map<ProductDto>(product);
-    }
-
-    public async Task<ProductDto> CreateProductAsync(CreateProductDto createProductDto)
-    {
-        var validationResult = await _validator.ValidateAsync(createProductDto);
-        
-        if (!validationResult.IsValid)
+        public ProductService(IProductRepository productRepository, IMapper mapper)
         {
-            var errors = validationResult.Errors.Select(e => e.ErrorMessage).ToList();
-            throw new ValidationException(errors);
+            _productRepository = productRepository;
+            _mapper = mapper;
         }
 
-        var product = _mapper.Map<Product>(createProductDto);
-        await _productRepository.AddAsync(product);
-        await InvalidateCacheAsync();
-        return _mapper.Map<ProductDto>(product);
-    }
-
-    public async Task<ProductDto> UpdateProductAsync(int id, UpdateProductDto updateProductDto)
-    {
-        var product = await _productRepository.GetByIdAsync(id)
-            ?? throw new NotFoundException($"Product with id {id} not found");
-
-        if (updateProductDto.CategoryId.HasValue)
+        public async Task<PagedList<ProductDto>> GetProductsAsync(ProductFilterDto filterDto)
         {
-            var categoryExists = await _categoryRepository.ExistsAsync(updateProductDto.CategoryId.Value);
-            if (!categoryExists)
-                throw new NotFoundException($"Category with id {updateProductDto.CategoryId.Value} not found");
+            var products = await _productRepository.GetProductsAsync(filterDto);
+            var productDtos = _mapper.Map<IEnumerable<ProductDto>>(products);
+            return new PagedList<ProductDto>(
+                productDtos.ToList(), 
+                products.TotalCount, 
+                products.PageNumber, 
+                products.PageSize
+            );
         }
 
-        _mapper.Map(updateProductDto, product);
-        await _productRepository.UpdateAsync(product);
-        await InvalidateCacheAsync();
-        return _mapper.Map<ProductDto>(product);
-    }
+        public async Task<ProductDto?> GetProductByIdAsync(int id)
+        {
+            var product = await _productRepository.GetByIdAsync(id);
+            return product != null ? _mapper.Map<ProductDto>(product) : null;
+        }
 
-    public async Task DeleteProductAsync(int id)
-    {
-        var product = await _productRepository.GetByIdAsync(id)
-            ?? throw new NotFoundException($"Product with id {id} not found");
+        public async Task<IEnumerable<ProductDto>> SearchProductsAsync(string searchTerm)
+        {
+            var products = await _productRepository.GetProductsAsync(new ProductFilterDto { SearchTerm = searchTerm });
+            return _mapper.Map<IEnumerable<ProductDto>>(products.Items);
+        }
 
-        await _productRepository.DeleteAsync(id);
-        await InvalidateCacheAsync();
-    }
+        public async Task<ProductDto> CreateProductAsync(CreateProductDto createProductDto)
+        {
+            var product = _mapper.Map<Product>(createProductDto);
+            var result = await _productRepository.AddAsync(product);
+            return _mapper.Map<ProductDto>(result);
+        }
 
-    public async Task<PagedResponse<ProductDto>> GetProductsAsync(ProductFilterDto filterDto)
-    {
-        var products = await _productRepository.GetProductsAsync(filterDto);
-        var productDtos = _mapper.Map<List<ProductDto>>(products.Items);
-        
-        return new PagedResponse<ProductDto>(
-            productDtos,
-            products.TotalCount,
-            products.PageNumber,
-            products.PageSize
-        );
-    }
+        public async Task<ProductDto> UpdateProductAsync(int id, UpdateProductDto updateProductDto)
+        {
+            var product = await _productRepository.GetByIdAsync(id)
+                ?? throw new NotFoundException("Product not found");
 
-    public async Task<IEnumerable<ProductDto>> SearchProductsAsync(string searchTerm)
-    {
-        var filterDto = new ProductFilterDto 
-        { 
-            SearchTerm = searchTerm,
-            PageSize = int.MaxValue
-        };
-        
-        var products = await _productRepository.GetProductsAsync(filterDto);
-        return _mapper.Map<IEnumerable<ProductDto>>(products.Items);
-    }
+            _mapper.Map(updateProductDto, product);
+            await _productRepository.UpdateAsync(product);
+            return _mapper.Map<ProductDto>(product);
+        }
 
-    private async Task InvalidateCacheAsync()
-    {
-        _cache.Remove(PRODUCTS_CACHE_KEY);
-        await Task.CompletedTask;
+        public async Task DeleteProductAsync(int id)
+        {
+            var product = await _productRepository.GetByIdAsync(id)
+                ?? throw new NotFoundException("Product not found");
+                
+            await _productRepository.DeleteAsync(id);
+        }
+
+        public async Task<IEnumerable<ProductDto>> GetAllProductsAsync()
+        {
+            var products = await _productRepository.GetAllAsync();
+            return _mapper.Map<IEnumerable<ProductDto>>(products);
+        }
     }
 }

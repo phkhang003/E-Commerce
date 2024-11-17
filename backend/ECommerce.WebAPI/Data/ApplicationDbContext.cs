@@ -14,6 +14,10 @@ public class ApplicationDbContext : DbContext
     public DbSet<Category> Categories { get; set; }
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderItem> OrderItems { get; set; }
+    public DbSet<Cart> Carts { get; set; }
+    public DbSet<CartItem> CartItems { get; set; }
+    public DbSet<Inventory> Inventories { get; set; }
+    public DbSet<Review> Reviews { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,23 +29,24 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<Product>()
             .Property(p => p.Price)
-            .HasPrecision(18, 2);
+            .HasColumnType("decimal(18,2)");
 
-        modelBuilder.Entity<OrderItem>(entity =>
-        {
-            entity.Property(oi => oi.UnitPrice)
-                .HasPrecision(18, 2);
+        modelBuilder.Entity<OrderItem>()
+            .Property(o => o.UnitPrice)
+            .HasColumnType("decimal(18,2)");
 
-            entity.HasOne(oi => oi.Order)
-                .WithMany(o => o.Items)
-                .HasForeignKey(oi => oi.OrderId)
-                .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<OrderItem>()
+            .Property(o => o.SubTotal)
+            .HasColumnType("decimal(18,2)");
 
-            entity.HasOne(oi => oi.Product)
-                .WithMany()
-                .HasForeignKey(oi => oi.ProductId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
+        modelBuilder.Entity<OrderItem>()
+            .HasOne(oi => oi.Product)
+            .WithMany()
+            .HasForeignKey(oi => oi.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<OrderItem>()
+            .Ignore("ProductId1");
 
         modelBuilder.Entity<Order>()
             .Property(o => o.TotalAmount)
