@@ -1,3 +1,18 @@
+using System.Linq.Expressions;
+using Microsoft.Extensions.Caching.Memory;
+using ECommerce.WebAPI.Exceptions;
+using Moq;
+using Xunit;
+using AutoMapper;
+using ECommerce.WebAPI.Models.DTOs.Order;
+using ECommerce.WebAPI.Models.Entities;
+using ECommerce.WebAPI.Repositories.Interfaces;
+using ECommerce.WebAPI.Services.Implementations;
+using FluentAssertions;
+using ECommerce.WebAPI.Models.Common;
+
+namespace ECommerce.WebAPI.Tests.Services;
+
 public class OrderServiceTests
 {
     private readonly Mock<IOrderRepository> _mockOrderRepo;
@@ -12,7 +27,6 @@ public class OrderServiceTests
         _mockProductRepo = new Mock<IProductRepository>();
         _mockMapper = new Mock<IMapper>();
         _mockCache = new Mock<IMemoryCache>();
-
         _sut = new OrderService(
             _mockOrderRepo.Object,
             _mockProductRepo.Object,
@@ -25,13 +39,18 @@ public class OrderServiceTests
     {
         // Arrange
         var userId = 1;
-        var createOrderDto = new CreateOrderDto(
-            ShippingAddress: "Test Address",
-            Items: new List<CreateOrderItemDto>
+        var createOrderDto = new CreateOrderDto
+        {
+            ShippingAddress = "Test Address",
+            Items = new List<CreateOrderItemDto>
             {
-                new(ProductId: 1, Quantity: 2)
+                new CreateOrderItemDto
+                {
+                    ProductId = 1,
+                    Quantity = 2
+                }
             }
-        );
+        };
 
         var product = new Product { Id = 1, Name = "Test Product", Price = 100, StockQuantity = 5 };
         var expectedOrder = new Order { Id = 1, UserId = userId, TotalAmount = 200 };
@@ -58,13 +77,18 @@ public class OrderServiceTests
     {
         // Arrange
         var userId = 1;
-        var createOrderDto = new CreateOrderDto(
-            ShippingAddress: "Test Address",
-            Items: new List<CreateOrderItemDto>
+        var createOrderDto = new CreateOrderDto
+        {
+            ShippingAddress = "Test Address",
+            Items = new List<CreateOrderItemDto>
             {
-                new(ProductId: 1, Quantity: 2)
+                new CreateOrderItemDto
+                {
+                    ProductId = 1,
+                    Quantity = 2
+                }
             }
-        );
+        };
 
         _mockProductRepo.Setup(x => x.GetByIdAsync(1))
             .ReturnsAsync((Product?)null);

@@ -1,3 +1,4 @@
+using ECommerce.WebAPI.Models.Common;
 using ECommerce.WebAPI.Models.Enums;
 
 namespace ECommerce.WebAPI.Models.Entities;
@@ -16,14 +17,4 @@ public class Order : BaseEntity
     public decimal TotalAmount { get; set; }
     public string ShippingAddress { get; set; }
     public virtual ICollection<OrderItem> Items { get; set; }
-}
-
-public class OrderItem : BaseEntity
-{
-    public int OrderId { get; set; }
-    public virtual Order? Order { get; set; }
-    public int ProductId { get; set; }
-    public virtual Product? Product { get; set; }
-    public int Quantity { get; set; }
-    public decimal UnitPrice { get; set; }
 }

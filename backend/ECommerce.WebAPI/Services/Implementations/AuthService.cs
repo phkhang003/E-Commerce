@@ -95,7 +95,9 @@ namespace ECommerce.WebAPI.Services.Implementations
 
         public async Task LogoutAsync()
         {
-            var userId = _currentUserService.GetUserId();
+            var userId = _currentUserService.UserId
+                ?? throw new UnauthorizedException("User not authenticated");
+            
             var user = await _context.Users.FindAsync(userId);
             
             if (user != null)
@@ -110,6 +112,17 @@ namespace ECommerce.WebAPI.Services.Implementations
         {
             _cache.Remove(string.Format(USER_ORDERS_CACHE_KEY, userId.ToString()));
             await Task.CompletedTask;
+        }
+
+        public async Task<UserDto> GetCurrentUserAsync()
+        {
+            var userId = _currentUserService.UserId 
+                ?? throw new UnauthorizedException("User not authenticated");
+            
+            var user = await _context.Users.FindAsync(userId)
+                ?? throw new NotFoundException("User not found");
+                
+            return _mapper.Map<UserDto>(user);
         }
 
         private async Task<AuthResponseDto> GenerateAuthResponseAsync(User user)

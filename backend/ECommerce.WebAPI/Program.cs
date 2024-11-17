@@ -151,7 +151,7 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddHttpContextAccessor();
 
 // Add validators
-builder.Services.AddScoped<IValidator<CreateProductDto>, ProductValidator>();
+builder.Services.AddScoped<IProductValidator, ProductValidator>();
 
 // Add exception handler
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

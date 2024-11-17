@@ -29,26 +29,37 @@ public class OrderRepository : BaseRepository<Order>, IOrderRepository
             .ToListAsync();
     }
 
-    public async Task<PagedList<Order>> GetOrdersAsync(OrderFilterDto filter)
+    public async Task<PagedList<Order>> GetOrdersAsync(OrderFilterDto filterDto)
     {
         var query = _context.Orders
             .Include(o => o.Items)
             .ThenInclude(i => i.Product)
-            .Include(o => o.User)
             .AsQueryable();
 
-        if (filter.UserId.HasValue)
-            query = query.Where(o => o.UserId == filter.UserId);
+        if (filterDto.Status.HasValue)
+        {
+            query = query.Where(o => o.Status == filterDto.Status.Value);
+        }
 
-        if (filter.Status.HasValue)
-            query = query.Where(o => o.Status == filter.Status);
+        if (filterDto.FromDate.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt >= filterDto.FromDate.Value);
+        }
 
-        if (filter.FromDate.HasValue)
-            query = query.Where(o => o.CreatedAt >= filter.FromDate);
+        if (filterDto.ToDate.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt <= filterDto.ToDate.Value);
+        }
 
-        if (filter.ToDate.HasValue)
-            query = query.Where(o => o.CreatedAt <= filter.ToDate);
+        if (filterDto.UserId.HasValue)
+        {
+            query = query.Where(o => o.UserId == filterDto.UserId.Value);
+        }
 
-        return await PagedList<Order>.CreateAsync(query, filter.PageNumber, filter.PageSize);
+        return await PagedList<Order>.CreateAsync(
+            query,
+            filterDto.PageNumber,
+            filterDto.PageSize
+        );
     }
 }

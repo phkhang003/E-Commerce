@@ -2,7 +2,8 @@ namespace ECommerce.WebAPI.Services.Interfaces;
 
 public interface ICurrentUserService
 {
-    string? GetUserId();
-    string? GetUserEmail();
-    string? GetUserRole();
+    int? UserId { get; }
+    string? UserName { get; }
+    string? UserRole { get; }
+    bool IsAuthenticated { get; }
 }

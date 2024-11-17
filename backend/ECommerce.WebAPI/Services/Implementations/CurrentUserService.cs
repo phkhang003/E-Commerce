@@ -13,12 +13,36 @@ public class CurrentUserService : ICurrentUserService
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public string? GetUserId() => 
-        _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+    public int? UserId
+    {
+        get
+        {
+            var userIdClaim = _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier);
+            return userIdClaim != null ? int.Parse(userIdClaim.Value) : null;
+        }
+    }
 
-    public string? GetUserEmail() =>
-        _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.Email);
+    public string? UserName
+    {
+        get
+        {
+            return _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.Name)?.Value;
+        }
+    }
 
-    public string? GetUserRole() =>
-        _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.Role);
+    public string? UserRole
+    {
+        get
+        {
+            return _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.Role)?.Value;
+        }
+    }
+
+    public bool IsAuthenticated
+    {
+        get
+        {
+            return _httpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated ?? false;
+        }
+    }
 }

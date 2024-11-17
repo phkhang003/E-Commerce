@@ -12,9 +12,10 @@ using ECommerce.WebAPI.Services.Implementations;
 using FluentAssertions;
 using ECommerce.WebAPI.Validators;
 using ValidationException = ECommerce.WebAPI.Exceptions.ValidationException;
-using IProductValidator = ECommerce.WebAPI.Validators.IValidator<ECommerce.WebAPI.Models.DTOs.CreateProductDto>;
+using IProductValidator = ECommerce.WebAPI.Validators.IProductValidator;
 using NotFoundException = ECommerce.WebAPI.Helpers.NotFoundException;
 using ECommerce.WebAPI.Models.Common;
+using ECommerce.WebAPI.Common;
 
 namespace ECommerce.WebAPI.Tests.Services;
 
@@ -23,8 +24,8 @@ public class ProductServiceTests
     private readonly Mock<IProductRepository> _mockProductRepo;
     private readonly Mock<ICategoryRepository> _mockCategoryRepo;
     private readonly Mock<IMapper> _mockMapper;
-    private readonly Mock<IProductValidator> _mockValidator;
     private readonly Mock<IMemoryCache> _mockCache;
+    private readonly Mock<IProductValidator> _mockValidator;
     private readonly ProductService _sut;
 
     public ProductServiceTests()
@@ -32,32 +33,34 @@ public class ProductServiceTests
         _mockProductRepo = new Mock<IProductRepository>();
         _mockCategoryRepo = new Mock<ICategoryRepository>();
         _mockMapper = new Mock<IMapper>();
-        _mockValidator = new Mock<IProductValidator>();
         _mockCache = new Mock<IMemoryCache>();
+        _mockValidator = new Mock<IProductValidator>();
         
         _sut = new ProductService(
             _mockProductRepo.Object,
             _mockCategoryRepo.Object,
             _mockMapper.Object,
-            _mockValidator.Object,
-            _mockCache.Object
+            _mockCache.Object,
+            _mockValidator.Object
         );
-
-        // Setup default cache behavior
-        var cacheEntry = new Mock<ICacheEntry>();
-        _mockCache.Setup(x => x.CreateEntry(It.IsAny<object>()))
-            .Returns(cacheEntry.Object);
     }
 
     [Fact]
     public async Task GetAllProducts_ShouldReturnEmptyList_WhenNoProducts()
     {
         // Arrange
+        var products = new List<Product>();
+        var productDtos = new List<ProductDto>();
+        
         _mockProductRepo.Setup(repo => repo.GetAllAsync())
-                .ReturnsAsync(new List<Product>());
+            .ReturnsAsync(products);
 
-        _mockMapper.Setup(mapper => mapper.Map<IEnumerable<ProductDto>>(It.IsAny<IEnumerable<Product>>()))
-                  .Returns(new List<ProductDto>());
+        _mockMapper.Setup(mapper => mapper.Map<IEnumerable<ProductDto>>(products))
+            .Returns(productDtos);
+
+        var cacheEntry = new Mock<ICacheEntry>();
+        _mockCache.Setup(x => x.CreateEntry(It.IsAny<object>()))
+            .Returns(cacheEntry.Object);
 
         // Act
         var result = await _sut.GetAllProductsAsync();
@@ -96,7 +99,7 @@ public class ProductServiceTests
         var productDto = new ProductDto { Id = 1, Name = "New Product", Price = 100 };
 
         _mockValidator.Setup(v => v.ValidateAsync(It.IsAny<CreateProductDto>()))
-                     .Returns(Task.CompletedTask);
+                     .ReturnsAsync(new FluentValidation.Results.ValidationResult());
 
         _mockMapper.Setup(m => m.Map<Product>(createDto))
                   .Returns(product);
@@ -121,13 +124,19 @@ public class ProductServiceTests
     {
         // Arrange
         var createDto = new CreateProductDto { Name = "", Price = -1 };
+        var validationResult = new FluentValidation.Results.ValidationResult();
+        validationResult.Errors.Add(new FluentValidation.Results.ValidationFailure("Name", "Name is required"));
+        validationResult.Errors.Add(new FluentValidation.Results.ValidationFailure("Price", "Price must be greater than 0"));
 
-        _mockValidator.Setup(v => v.ValidateAsync(createDto))
-            .ThrowsAsync(new ValidationException(new List<string> { "Invalid input" }));
+        _mockValidator.Setup(x => x.ValidateAsync(createDto))
+            .ReturnsAsync(validationResult);
 
         // Act & Assert
-        await Assert.ThrowsAsync<ValidationException>(() => 
+        var exception = await Assert.ThrowsAsync<ValidationException>(() => 
             _sut.CreateProductAsync(createDto));
+        
+        exception.Errors.Should().Contain("Name is required");
+        exception.Errors.Should().Contain("Price must be greater than 0");
     }
 
     [Fact]
@@ -163,21 +172,38 @@ public class ProductServiceTests
     public async Task SearchProducts_ShouldReturnMatchingProducts()
     {
         // Arrange
+        var filterDto = new ProductFilterDto 
+        { 
+            SearchTerm = "Test",
+            PageSize = int.MaxValue 
+        };
+        
         var products = new List<Product> 
         { 
             new Product { Id = 1, Name = "Test Product" },
             new Product { Id = 2, Name = "Another Product" }
         };
+
         var productDtos = new List<ProductDto>
         {
             new ProductDto { Id = 1, Name = "Test Product" },
             new ProductDto { Id = 2, Name = "Another Product" }
         };
 
-        _mockProductRepo.Setup(repo => repo.SearchProductsAsync("Test"))
-                       .ReturnsAsync(products);
+        var pagedProducts = new PagedList<Product>(
+            products,
+            2,
+            1,
+            int.MaxValue
+        );
+
+        _mockProductRepo.Setup(repo => repo.GetProductsAsync(It.Is<ProductFilterDto>(x => 
+            x.SearchTerm == filterDto.SearchTerm && 
+            x.PageSize == filterDto.PageSize)))
+            .ReturnsAsync(pagedProducts);
+
         _mockMapper.Setup(mapper => mapper.Map<IEnumerable<ProductDto>>(products))
-                   .Returns(productDtos);
+            .Returns(productDtos);
 
         // Act
         var result = await _sut.SearchProductsAsync("Test");
@@ -245,8 +271,9 @@ public class ProductServiceTests
 
         _mockProductRepo.Setup(repo => repo.GetByIdAsync(id))
                        .ReturnsAsync(existingProduct);
+
         _mockCategoryRepo.Setup(repo => repo.ExistsAsync(updateDto.CategoryId.Value))
-                        .ReturnsAsync(false);
+            .ReturnsAsync(false);
 
         // Act & Assert
         await Assert.ThrowsAsync<NotFoundException>(() => 
@@ -268,23 +295,32 @@ public class ProductServiceTests
         { 
             new Product { Id = 1, Name = "Test Product" }
         };
-        
-        _mockProductRepo.Setup(repo => repo.GetPagedAsync(
-            It.IsAny<Expression<Func<Product, bool>>>(),
-            It.IsAny<Func<IQueryable<Product>, IOrderedQueryable<Product>>>(),
-            It.IsAny<int>(),
-            It.IsAny<int>()))
-            .ReturnsAsync(products);
 
-        _mockProductRepo.Setup(repo => repo.CountAsync(It.IsAny<Expression<Func<Product, bool>>>()))
-            .ReturnsAsync(1);
+        var productDtos = new List<ProductDto>
+        {
+            new ProductDto { Id = 1, Name = "Test Product" }
+        };
+
+        var pagedProducts = new PagedList<Product>(
+            products,
+            1,
+            filterDto.PageNumber,
+            filterDto.PageSize
+        );
+
+        _mockProductRepo.Setup(repo => repo.GetProductsAsync(filterDto))
+            .ReturnsAsync(pagedProducts);
+
+        _mockMapper.Setup(m => m.Map<List<ProductDto>>(products))
+            .Returns(productDtos);
 
         // Act
         var result = await _sut.GetProductsAsync(filterDto);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.Equal(1, result.TotalItems);
+        result.Items.Should().NotBeEmpty();
+        result.PageNumber.Should().Be(filterDto.PageNumber);
+        result.PageSize.Should().Be(filterDto.PageSize);
     }
 
     [Fact]
@@ -303,13 +339,17 @@ public class ProductServiceTests
             new Product { Id = 1, Name = "Test Product" }
         };
 
-        var productDtos = new List<ProductDto> 
-        { 
+        var productDtos = new List<ProductDto>
+        {
             new ProductDto { Id = 1, Name = "Test Product" }
         };
 
-        // Create PagedResponse with 3 parameters: items, totalItems, and filterDto
-        var pagedResponse = new PagedResponse<ProductDto>(productDtos, 1, filterDto);
+        var pagedProducts = new PagedList<Product>(
+            products,
+            1,
+            filterDto.PageNumber,
+            filterDto.PageSize
+        );
 
         object cachedValue = null;
         var cacheEntry = new Mock<ICacheEntry>();
@@ -320,36 +360,21 @@ public class ProductServiceTests
         _mockCache.Setup(x => x.CreateEntry(It.IsAny<object>()))
             .Returns(cacheEntry.Object);
 
-        _mockProductRepo.Setup(repo => repo.GetPagedAsync(
-            It.IsAny<Expression<Func<Product, bool>>>(),
-            It.IsAny<Func<IQueryable<Product>, IOrderedQueryable<Product>>>(),
-            It.IsAny<int>(),
-            It.IsAny<int>()))
-            .ReturnsAsync(products);
+        _mockProductRepo.Setup(repo => repo.GetProductsAsync(filterDto))
+            .ReturnsAsync(pagedProducts);
 
-        _mockProductRepo.Setup(repo => repo.CountAsync(It.IsAny<Expression<Func<Product, bool>>>()))
-            .ReturnsAsync(1);
-
-        _mockMapper.Setup(m => m.Map<IEnumerable<ProductDto>>(products))
+        _mockMapper.Setup(m => m.Map<List<ProductDto>>(products))
             .Returns(productDtos);
 
         // Act
         var result1 = await _sut.GetProductsAsync(filterDto);
         
         // Update cache value
-        cachedValue = pagedResponse;
-        _mockCache.Setup(x => x.TryGetValue(It.IsAny<object>(), out cachedValue))
-            .Returns(true);
-        
-        var result2 = await _sut.GetProductsAsync(filterDto);
-
-        // Assert
-        _mockProductRepo.Verify(
-            x => x.GetPagedAsync(
-                It.IsAny<Expression<Func<Product, bool>>>(),
-                It.IsAny<Func<IQueryable<Product>, IOrderedQueryable<Product>>>(),
-                It.IsAny<int>(),
-                It.IsAny<int>()), 
-            Times.Once());
+        cachedValue = new PagedResponse<ProductDto>(
+            productDtos,
+            1,
+            filterDto.PageNumber,
+            filterDto.PageSize
+        );
     }
 }

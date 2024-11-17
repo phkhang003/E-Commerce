@@ -3,32 +3,26 @@ using ECommerce.WebAPI.Repositories.Interfaces;
 using ECommerce.WebAPI.Exceptions;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using FluentValidation;
 
 namespace ECommerce.WebAPI.Validators;
 
-public class ProductValidator : IValidator<CreateProductDto>
+public class ProductValidator : AbstractValidator<CreateProductDto>, IProductValidator
 {
     private readonly ICategoryRepository _categoryRepository;
 
     public ProductValidator(ICategoryRepository categoryRepository)
     {
         _categoryRepository = categoryRepository;
+
+        RuleFor(x => x.Name).NotEmpty().WithMessage("Name is required");
+        RuleFor(x => x.Price).GreaterThan(0).WithMessage("Price must be greater than 0");
+        RuleFor(x => x.CategoryId).MustAsync(async (id, _) => 
+            await _categoryRepository.ExistsAsync(id)).WithMessage("Category not found");
     }
 
-    public async Task ValidateAsync(CreateProductDto dto)
+    async Task<FluentValidation.Results.ValidationResult> IProductValidator.ValidateAsync(CreateProductDto createProductDto)
     {
-        var errors = new List<string>();
-
-        if (string.IsNullOrEmpty(dto.Name))
-            errors.Add("Name is required");
-
-        if (dto.Price <= 0)
-            errors.Add("Price must be greater than 0");
-
-        if (!await _categoryRepository.ExistsAsync(dto.CategoryId))
-            errors.Add($"Category with id {dto.CategoryId} not found");
-
-        if (errors.Any())
-            throw new ValidationException(errors);
+        return await ValidateAsync(createProductDto);
     }
 }

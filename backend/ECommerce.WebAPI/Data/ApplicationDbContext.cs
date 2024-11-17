@@ -25,14 +25,26 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<Product>()
             .Property(p => p.Price)
-            .HasColumnType("decimal(18,2)");
+            .HasPrecision(18, 2);
 
-        modelBuilder.Entity<OrderItem>()
-            .Property(oi => oi.UnitPrice)
-            .HasColumnType("decimal(18,2)");
+        modelBuilder.Entity<OrderItem>(entity =>
+        {
+            entity.Property(oi => oi.UnitPrice)
+                .HasPrecision(18, 2);
+
+            entity.HasOne(oi => oi.Order)
+                .WithMany(o => o.Items)
+                .HasForeignKey(oi => oi.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(oi => oi.Product)
+                .WithMany()
+                .HasForeignKey(oi => oi.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<Order>()
             .Property(o => o.TotalAmount)
-            .HasColumnType("decimal(18,2)");
+            .HasPrecision(18, 2);
     }
 }

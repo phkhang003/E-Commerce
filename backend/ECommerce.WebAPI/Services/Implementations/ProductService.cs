@@ -7,6 +7,8 @@ using ECommerce.WebAPI.Validators;
 using ECommerce.WebAPI.Services.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 using ECommerce.WebAPI.Common;
+using ECommerce.WebAPI.Exceptions;
+using NotFoundException = ECommerce.WebAPI.Helpers.NotFoundException;
 
 namespace ECommerce.WebAPI.Services.Implementations;
 
@@ -14,14 +16,23 @@ public class ProductService : IProductService
 {
     private const string PRODUCTS_CACHE_KEY = "products";
     private readonly IProductRepository _productRepository;
+    private readonly ICategoryRepository _categoryRepository;
     private readonly IMapper _mapper;
     private readonly IMemoryCache _cache;
+    private readonly IProductValidator _validator;
 
-    public ProductService(IProductRepository productRepository, IMapper mapper, IMemoryCache cache)
+    public ProductService(
+        IProductRepository productRepository,
+        ICategoryRepository categoryRepository, 
+        IMapper mapper,
+        IMemoryCache cache,
+        IProductValidator validator)
     {
         _productRepository = productRepository;
+        _categoryRepository = categoryRepository;
         _mapper = mapper;
         _cache = cache;
+        _validator = validator;
     }
 
     public async Task<IEnumerable<ProductDto>> GetAllProductsAsync()
@@ -48,16 +59,31 @@ public class ProductService : IProductService
 
     public async Task<ProductDto> CreateProductAsync(CreateProductDto createProductDto)
     {
+        var validationResult = await _validator.ValidateAsync(createProductDto);
+        
+        if (!validationResult.IsValid)
+        {
+            var errors = validationResult.Errors.Select(e => e.ErrorMessage).ToList();
+            throw new ValidationException(errors);
+        }
+
         var product = _mapper.Map<Product>(createProductDto);
-        var createdProduct = await _productRepository.AddAsync(product);
+        await _productRepository.AddAsync(product);
         await InvalidateCacheAsync();
-        return _mapper.Map<ProductDto>(createdProduct);
+        return _mapper.Map<ProductDto>(product);
     }
 
     public async Task<ProductDto> UpdateProductAsync(int id, UpdateProductDto updateProductDto)
     {
         var product = await _productRepository.GetByIdAsync(id)
             ?? throw new NotFoundException($"Product with id {id} not found");
+
+        if (updateProductDto.CategoryId.HasValue)
+        {
+            var categoryExists = await _categoryRepository.ExistsAsync(updateProductDto.CategoryId.Value);
+            if (!categoryExists)
+                throw new NotFoundException($"Category with id {updateProductDto.CategoryId.Value} not found");
+        }
 
         _mapper.Map(updateProductDto, product);
         await _productRepository.UpdateAsync(product);
@@ -89,16 +115,17 @@ public class ProductService : IProductService
 
     public async Task<IEnumerable<ProductDto>> SearchProductsAsync(string searchTerm)
     {
-        var products = await _productRepository.GetProductsAsync(new ProductFilterDto 
+        var filterDto = new ProductFilterDto 
         { 
             SearchTerm = searchTerm,
-            PageNumber = 1,
             PageSize = int.MaxValue
-        });
+        };
+        
+        var products = await _productRepository.GetProductsAsync(filterDto);
         return _mapper.Map<IEnumerable<ProductDto>>(products.Items);
     }
 
-    public async Task InvalidateCacheAsync()
+    private async Task InvalidateCacheAsync()
     {
         _cache.Remove(PRODUCTS_CACHE_KEY);
         await Task.CompletedTask;
