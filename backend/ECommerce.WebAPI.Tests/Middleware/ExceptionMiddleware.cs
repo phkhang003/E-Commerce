@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
 using ECommerce.WebAPI.Common.Exceptions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
 namespace ECommerce.WebAPI.Middlewares
 {

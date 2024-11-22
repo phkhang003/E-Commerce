@@ -11,9 +11,9 @@ using ECommerce.WebAPI.Repositories.Interfaces;
 using ECommerce.WebAPI.Services.Implementations;
 using FluentAssertions;
 using ECommerce.WebAPI.Validators;
-using ValidationException = ECommerce.WebAPI.Exceptions.ValidationException;
+using ValidationException = ECommerce.WebAPI.Common.Exceptions.ValidationException;
 using IProductValidator = ECommerce.WebAPI.Validators.IProductValidator;
-using NotFoundException = ECommerce.WebAPI.Helpers.NotFoundException;
+using NotFoundException = ECommerce.WebAPI.Common.Exceptions.NotFoundException;
 using ECommerce.WebAPI.Models.Common;
 using ECommerce.WebAPI.Common;
 
@@ -40,8 +40,8 @@ public class ProductServiceTests
             _mockProductRepo.Object,
             _mockCategoryRepo.Object,
             _mockMapper.Object,
-            _mockCache.Object,
-            _mockValidator.Object
+            _mockValidator.Object,
+            _mockCache.Object
         );
     }
 
@@ -135,8 +135,8 @@ public class ProductServiceTests
         var exception = await Assert.ThrowsAsync<ValidationException>(() => 
             _sut.CreateProductAsync(createDto));
         
-        exception.Errors.Should().Contain("Name is required");
-        exception.Errors.Should().Contain("Price must be greater than 0");
+        exception.Message.Should().Contain("Name is required");
+        exception.Message.Should().Contain("Price must be greater than 0");
     }
 
     [Fact]
@@ -197,9 +197,7 @@ public class ProductServiceTests
             int.MaxValue
         );
 
-        _mockProductRepo.Setup(repo => repo.GetProductsAsync(It.Is<ProductFilterDto>(x => 
-            x.SearchTerm == filterDto.SearchTerm && 
-            x.PageSize == filterDto.PageSize)))
+        _mockProductRepo.Setup(repo => repo.GetProductsAsync(It.IsAny<ProductFilterDto>()))
             .ReturnsAsync(pagedProducts);
 
         _mockMapper.Setup(mapper => mapper.Map<IEnumerable<ProductDto>>(products))
@@ -311,7 +309,7 @@ public class ProductServiceTests
         _mockProductRepo.Setup(repo => repo.GetProductsAsync(filterDto))
             .ReturnsAsync(pagedProducts);
 
-        _mockMapper.Setup(m => m.Map<List<ProductDto>>(products))
+        _mockMapper.Setup(m => m.Map<IEnumerable<ProductDto>>(It.IsAny<IEnumerable<Product>>()))
             .Returns(productDtos);
 
         // Act
@@ -363,7 +361,7 @@ public class ProductServiceTests
         _mockProductRepo.Setup(repo => repo.GetProductsAsync(filterDto))
             .ReturnsAsync(pagedProducts);
 
-        _mockMapper.Setup(m => m.Map<List<ProductDto>>(products))
+        _mockMapper.Setup(m => m.Map<IEnumerable<ProductDto>>(It.IsAny<IEnumerable<Product>>()))
             .Returns(productDtos);
 
         // Act

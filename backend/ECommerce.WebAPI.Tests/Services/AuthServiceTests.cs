@@ -11,7 +11,6 @@ using FluentAssertions;
 using ECommerce.WebAPI.Exceptions;
 using Microsoft.AspNetCore.Http;
 using ECommerce.WebAPI.Data;
-using ECommerce.WebAPI.Services.Interfaces;
 
 namespace ECommerce.WebAPI.Tests.Services;
 
