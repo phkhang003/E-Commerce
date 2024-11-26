@@ -10,4 +10,6 @@ public interface IAuthService
     Task RevokeTokenAsync(string refreshToken);
     Task LogoutAsync();
     Task InvalidateOrderCacheAsync(int userId);
+    Task<string> GeneratePasswordResetTokenAsync(string email);
+    Task ResetPasswordAsync(ResetPasswordDto resetPasswordDto);
 }

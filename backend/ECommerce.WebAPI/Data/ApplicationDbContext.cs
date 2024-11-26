@@ -18,6 +18,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<CartItem> CartItems { get; set; }
     public DbSet<Inventory> Inventories { get; set; }
     public DbSet<Review> Reviews { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,17 +37,13 @@ public class ApplicationDbContext : DbContext
             .HasColumnType("decimal(18,2)");
 
         modelBuilder.Entity<OrderItem>()
-            .Property(o => o.SubTotal)
-            .HasColumnType("decimal(18,2)");
-
-        modelBuilder.Entity<OrderItem>()
             .HasOne(oi => oi.Product)
             .WithMany()
             .HasForeignKey(oi => oi.ProductId)
             .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<OrderItem>()
-            .Ignore("ProductId1");
+            .Ignore(oi => oi.SubTotal);
 
         modelBuilder.Entity<Order>()
             .Property(o => o.TotalAmount)

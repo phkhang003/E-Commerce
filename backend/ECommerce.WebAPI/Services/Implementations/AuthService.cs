@@ -71,24 +71,40 @@ namespace ECommerce.WebAPI.Services.Implementations
 
         public async Task<AuthResponseDto> RefreshTokenAsync(string token, string refreshToken)
         {
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
+            var storedToken = await _context.RefreshTokens
+                .Include(rt => rt.User)
+                .FirstOrDefaultAsync(rt => rt.Token == refreshToken && !rt.IsRevoked);
 
-            if (user == null || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
+            if (storedToken == null || storedToken.ExpiresAt < DateTime.UtcNow)
                 throw new UnauthorizedException("Invalid refresh token");
 
-            return await GenerateAuthResponseAsync(user);
+            var newAccessToken = _tokenService.GenerateAccessToken(storedToken.User);
+            var newRefreshToken = _tokenService.GenerateRefreshToken();
+            var expiresAt = DateTime.UtcNow.AddDays(7);
+
+            storedToken.IsRevoked = true;
+            await _context.RefreshTokens.AddAsync(new RefreshToken
+            {
+                Token = newRefreshToken,
+                UserId = storedToken.UserId,
+                ExpiresAt = expiresAt,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            await _context.SaveChangesAsync();
+
+            var userDto = _mapper.Map<UserDto>(storedToken.User);
+            return new AuthResponseDto(newAccessToken, newRefreshToken, expiresAt, userDto);
         }
 
         public async Task RevokeTokenAsync(string refreshToken)
         {
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
+            var storedToken = await _context.RefreshTokens
+                .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
 
-            if (user != null)
+            if (storedToken != null)
             {
-                user.RefreshToken = null;
-                user.RefreshTokenExpiryTime = null;
+                storedToken.IsRevoked = true;
                 await _context.SaveChangesAsync();
             }
         }
@@ -98,14 +114,16 @@ namespace ECommerce.WebAPI.Services.Implementations
             var userId = _currentUserService.UserId
                 ?? throw new UnauthorizedException("User not authenticated");
             
-            var user = await _context.Users.FindAsync(userId);
+            var activeTokens = await _context.RefreshTokens
+                .Where(rt => rt.UserId == userId && !rt.IsRevoked)
+                .ToListAsync();
             
-            if (user != null)
+            foreach (var token in activeTokens)
             {
-                user.RefreshToken = null;
-                user.RefreshTokenExpiryTime = null;
-                await _context.SaveChangesAsync();
+                token.IsRevoked = true;
             }
+            
+            await _context.SaveChangesAsync();
         }
 
         public async Task InvalidateOrderCacheAsync(int userId)
@@ -129,22 +147,54 @@ namespace ECommerce.WebAPI.Services.Implementations
         {
             var token = _tokenService.GenerateAccessToken(user);
             var refreshToken = _tokenService.GenerateRefreshToken();
-            var expiresAt = DateTime.UtcNow.AddHours(1);
+            var expiresAt = DateTime.UtcNow.AddDays(7);
 
-            user.RefreshToken = refreshToken;
-            user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
-            await _context.SaveChangesAsync();
-
-            var userDto = new UserDto
+            var refreshTokenEntity = new RefreshToken
             {
-                Id = user.Id.ToString(),
-                Email = user.Email,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Role = user.Role
+                Token = refreshToken,
+                UserId = user.Id,
+                ExpiresAt = expiresAt,
+                CreatedAt = DateTime.UtcNow
             };
 
+            _context.RefreshTokens.Add(refreshTokenEntity);
+            await _context.SaveChangesAsync();
+
+            var userDto = _mapper.Map<UserDto>(user);
             return new AuthResponseDto(token, refreshToken, expiresAt, userDto);
+        }
+
+        public async Task<string> GeneratePasswordResetTokenAsync(string email)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email)
+                ?? throw new NotFoundException("User not found");
+
+            var resetToken = _tokenService.GeneratePasswordResetToken();
+            user.PasswordResetToken = resetToken;
+            user.ResetTokenExpiresAt = DateTime.UtcNow.AddHours(1);
+            
+            await _context.SaveChangesAsync();
+            return resetToken;
+        }
+
+        public async Task ResetPasswordAsync(ResetPasswordDto resetPasswordDto)
+        {
+            if (resetPasswordDto.NewPassword != resetPasswordDto.ConfirmPassword)
+                throw new ECommerce.WebAPI.Exceptions.ValidationException("Passwords do not match");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => 
+                u.Email == resetPasswordDto.Email && 
+                u.PasswordResetToken == resetPasswordDto.Token)
+                ?? throw new NotFoundException("Invalid reset token");
+
+            if (user.ResetTokenExpiresAt < DateTime.UtcNow)
+                throw new ECommerce.WebAPI.Exceptions.ValidationException("Reset token has expired");
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(resetPasswordDto.NewPassword);
+            user.PasswordResetToken = null;
+            user.ResetTokenExpiresAt = null;
+
+            await _context.SaveChangesAsync();
         }
     }
 }

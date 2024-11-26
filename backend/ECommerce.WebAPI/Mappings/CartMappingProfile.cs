@@ -1,21 +1,18 @@
 using AutoMapper;
-using ECommerce.WebAPI.Models.DTOs;
 using ECommerce.WebAPI.Models.Entities;
+using ECommerce.WebAPI.Models.DTOs.Auth;
 
-namespace ECommerce.WebAPI.Mappings
+namespace ECommerce.WebAPI.Mappings;
+
+public class MappingProfile : Profile
 {
-    public class CartMappingProfile : Profile
+    public MappingProfile()
     {
-        public CartMappingProfile()
-        {
-            CreateMap<Cart, CartDto>();
-            CreateMap<CartItem, CartItemDto>()
-                .ForMember(dest => dest.ProductName, 
-                    opt => opt.MapFrom(src => src.Product != null ? src.Product.Name : string.Empty))
-                .ForMember(dest => dest.UnitPrice,
-                    opt => opt.MapFrom(src => src.Product != null ? src.Product.Price : 0))
-                .ForMember(dest => dest.SubTotal,
-                    opt => opt.MapFrom(src => src.Product != null ? src.Product.Price * src.Quantity : 0));
-        }
+        CreateMap<User, UserDto>()
+            .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+            .ForMember(dest => dest.Email, opt => opt.MapFrom(src => src.Email))
+            .ForMember(dest => dest.FirstName, opt => opt.MapFrom(src => src.FirstName))
+            .ForMember(dest => dest.LastName, opt => opt.MapFrom(src => src.LastName))
+            .ForMember(dest => dest.Role, opt => opt.MapFrom(src => src.Role));
     }
 }
